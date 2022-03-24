@@ -1,3 +1,5 @@
+from nis import cat
+from warnings import catch_warnings
 from flask import Flask, request, render_template, redirect, flash, session
 from flask_debugtoolbar import DebugToolbarExtension
 from surveys import satisfaction_survey as survey
@@ -8,7 +10,6 @@ app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
 
 debug = DebugToolbarExtension(app)
 
-responses = []
 
 @app.get("/")
 def index():
@@ -26,11 +27,30 @@ def index():
 def begin_survey():
     """Redirects to first question"""
 
+    session['responses']= []
+
     return redirect("/questions/0")
+
+
+def find_correct_question():
+    """Find correct question index"""
+    responses = session['responses']
+    correct_question = len(responses)
+    return correct_question
 
 @app.get("/questions/<int:question_id>")
 def show_question(question_id):
-    """Displays question"""
+    """Displays question and redirects as needed"""
+    correct_question = find_correct_question()
+
+    if correct_question == len(survey.questions):
+        return redirect("/complete")
+
+    if question_id > len(survey.questions) or question_id is not correct_question:
+        if correct_question == len(survey.questions):
+            return redirect("/complete")
+        flash("Please answer the questions in order!")
+        return redirect(f"/questions/{correct_question}")
 
     question_string = survey.questions[question_id].question
     question_choices = survey.questions[question_id].choices
@@ -40,20 +60,23 @@ def show_question(question_id):
         choices = question_choices,
         question = question_string)
 
+
 @app.post("/answer")
 def submit_answer():
-    """"Appends answer to the response list"""
+    """Appends answer to the response session"""
 
+    responses = session['responses']
     responses.append(request.form["answer"])
-    # print(responses)
-    question_number = len(responses)
-    if question_number == len(survey.questions):
+    session['responses']=responses
+
+    correct_question = find_correct_question()
+    if correct_question == len(survey.questions):
         return redirect("/complete")
-    else:
-        return redirect(f"/questions/{question_number}")
+
+    return redirect(f"/questions/{correct_question}")
 
 @app.get("/complete")
 def complete_survey():
     """Redirects user to completion page"""
-    print(responses)
+    print(session['responses'])
     return render_template("completion.html")
